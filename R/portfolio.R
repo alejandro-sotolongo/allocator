@@ -3,6 +3,7 @@ Portfolio <- R6::R6Class(
   public = list(
     name = 'port',
     asset_ret = xts(),
+    asset_ret_clean = xts(),
     asset_wgt = xts(),
     perf_stats = NULL,
     frontier = NULL,
@@ -55,6 +56,16 @@ Portfolio <- R6::R6Class(
       self$benchmark <- benchmark
     },
 
+    clean_asset_ret = function(asset_ret = NULL, eps = 0.05) {
+      if (is.null(asset_ret)) {
+        asset_ret <- self$asset_ret
+      }
+      if (is.null(asset_ret) | nrow(asset_ret) == 0) {
+        stop('no asset returns to clean')
+      }
+      
+    }
+    
     lazy_reb_wgt = function(reb_wgt = NULL, reb_freq = NULL, date_start = NULL,
                             date_end = NULL) {
 
@@ -115,3 +126,14 @@ download_tiingo <- function(ticker, t_api) {
   ret <- price / lag.xts(price, 1) - 1
   return(ret[-1, ])
 }
+
+clean_ret <- function(x, eps = 0.05) {
+  bad_col <- colSums(is.na(x)) / nrow(x) > eps
+  miss_dat <- x[, bad_col]
+  dat <- x[, !bad_col]
+  fill_dat <- dat[is.na(dat)] <- 0
+  res <- list()
+  res$ret <- fill_dat
+  res$miss_ret <- miss_dat
+  return(res)
+} 

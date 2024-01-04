@@ -1,11 +1,14 @@
+#' @import xts
 Portfolio <- R6::R6Class(
   'Portfolio',
   public = list(
     name = 'port',
     asset_ret = xts(),
-    asset_ret_clean = xts(),
     asset_wgt = xts(),
+    port_ret = xts(),
+    port_wealth = xts(),
     perf_stats = NULL,
+    risk_stats = NULL,
     frontier = NULL,
     risk_obj = c('vol', 'var', 'cvar', 'te', 'te.var', 'te.cvar'),
     exp_mu = NULL,
@@ -23,14 +26,11 @@ Portfolio <- R6::R6Class(
     initialize = function(
       name = 'port',
       asset_ret = NULL,
-      asset_wgt = NULL,
       risk_obj = c('vol', 'var', 'cvar', 'te', 'te.var', 'te.cvar'),
       exp_mu = NULL,
       exp_cov = NULL,
       cap_cons = NULL,
       risk_cons = NULL,
-      hist_mu = NULL,
-      hist_cov = NULL,
       ret_freq = c('D', 'M', 'Q', 'A'),
       reb_freq = c(NULL, 'D', 'M', 'Q', 'A'),
       reb_wgt = NULL,
@@ -38,17 +38,13 @@ Portfolio <- R6::R6Class(
       benchmark = NULL)
     {
       if (is.null(asset_ret)) asset_ret <- xts()
-      if (is.null(asset_wgt)) asset_wgt <- xts()
       if (is.null(rf)) rf <- xts()
       self$name <- name
       self$asset_ret <- asset_ret
-      self$asset_wgt <- asset_wgt
       self$risk_obj <- risk_obj
       self$exp_mu <- exp_mu
       self$exp_cov <- exp_cov
       self$risk_cons <- risk_cons
-      self$hist_mu <- hist_mu
-      self$hist_cov <- hist_cov
       self$ret_freq <- ret_freq[1]
       self$reb_freq <- reb_freq[1]
       self$reb_wgt <- reb_wgt
@@ -63,77 +59,194 @@ Portfolio <- R6::R6Class(
       if (is.null(asset_ret) | nrow(asset_ret) == 0) {
         stop('no asset returns to clean')
       }
-      
-    }
+      res <- clean_ret(asset_ret, eps)
+      if (ncol(res$miss_ret) > 0) {
+        warning('removed returns ', paste0(colnames(res$miss_ret), ', '))
+      }
+      self$asset_ret <- res$ret
+      invisible(self)
+    },
     
-    lazy_reb_wgt = function(reb_wgt = NULL, reb_freq = NULL, date_start = NULL,
-                            date_end = NULL) {
+    align_reb_wgt = function(sum_to_1 = TRUE) {
+      # check for asset returns
+      # sum_to_1 = boolean to reconstitute weights to sum to 100% if a weight
+      #   needs to be removed b/c it was not found in the return time-series
+      if (is.null(self$asset_ret) || is_null_dim(self$asset_ret)) {
+        warning('no asset_returns found')
+        return()
+      }
+      
+      miss <- setdiff(colnames(self$reb_wgt), colnames(self$asset_ret))
+      if (identical(miss, colnames(self$reb_wgt))) {
+        stop('no intersection of $reb_wgt and $asset_ret columns')
+      }
+      
+      inter <- intersect(colnames(self$reb_wgt), colnames(self$asset_ret))
+      unn <- union(colnames(self$reb_wgt), colnames(self$asset_ret))
+      if (length(unn) > length(inter)) {
+        warning(c(unn[!unn %in% inter], ' not in intersection'))
+      }
+      self$reb_wgt <- self$reb_wgt[, inter]
+      self$asset_ret <- self$asset_ret[, inter]
+      if (sum_to_1) {
+        self$reb_wgt <- self$reb_wgt / rowSums(self$reb_wgt, na.rm = TRUE)
+      }
+      invisible(self)
+    },
+    
+    check_wgt_ret = function() {
+      if (is.null(self$asset_ret) || is_null_dim(self$asset_ret)) {
+        stop('no asset_returns found')
+      }
+      if (is.null(self$reb_wgt) | length(self$reb_wgt) == 0) {
+        stop('no rebalance weights found')
+      }
+      if (!all(colnames(self$asset_ret) == colnames(self$reb_wgt))) {
+        stop('rebalance weights and returns do not match, try align_reb_wgt()')
+      }
+    },
+    
+    lazy_reb_wgt = function(reb_wgt = NULL, reb_freq = NULL) {
 
-      if (is.null(date_start)) {
-        date_start <- zoo::index(self$asset_ret)
-        if (is.na(date_start)) {
-          stop('need either a date_start or asset_ret')
-        }
+      # lazy_reb_wgt helps to set up a rebalance weight xts
+      # reb_wgt = optional parameter to pass through a vector or xts of
+      #   rebalance weights, if left to default of NULL, then the function will
+      #   use self$rebal_wgt
+      # reb_freq = optional parameter to set a constant rebalance frequency, if
+      #  a frequency is specified a rebalance on each month, quarter, year, etc, 
+      #  will be added using weights from the prior rebalance before that period
+      
+      if (is.null(self$asset_ret) || is_null_dim(self$asset_ret)) {
+        warning('no asset returns found')
+        return()
       }
-      if (is.null(date_end)) {
-        date_end <- zoo::index(self$asset_ret)[nrow(self$asset_ret)]
-        if (is.na(date_end)) {
-          stop('need either a date_end or asset_ret')
-        }
+      # NULL rebalance handle as buy and hold, or don't add additional dates to rebal
+      if (is.null(reb_freq)) {
+        reb_freq <- 'BH'
       }
-      date_start <- as.Date(date_start)
-      date_end <- as.Date(date_end)
+      if (is.null(reb_wgt)) {
+        reb_wgt <- self$reb_wgt
+      }
+      # set start and end dates based on returns
+      date_start <- zoo::index(self$asset_ret)[1]
+      date_end <- zoo::index(self$asset_ret)[nrow(self$asset_ret)]
+      # if rebalance weights are a vector, convert into one row xts
+      if (is.vector(reb_wgt)) {
+        if (length(reb_wgt) != ncol(self$asset_ret)) {
+          warning('vector of weights does not match number of assets')
+          return()
+        }
+        reb_wgt <- xts(matrix(reb_wgt, nrow = 1), date_start)
+        colnames(reb_wgt) <- colnames(self$asset_ret)
+      }
+      
+      # make sure weight and return columns match
+      self$align_reb_wgt()
+      
+      reb_freq <- check_reb_freq(reb_freq)
+      # handle rebalance frequency
       if (reb_freq == 'D') {
         dt_vec <- zoo::index(self$asset_ret)
-        if (length(dt_vec) == 0) {
-          stop('D reb_freq specified and missing asset_ret')
-        }
-      }
-      if (reb_freq == 'M') {
+      } else if (reb_freq == 'M') {
         dt_vec <- seq(date_start, date_end, 'months')
         dt_vec <- lubridate::floor_date(dt_vec + 10, 'months') - 1
-      }
-      if (reb_freq == 'Q') {
+      } else if (reb_freq == 'Q') {
         dt_vec <- seq(date_start, date_end, 'quarters')
         dt_vec <- lubridate::floor_date(dt_vec + 10, 'quarters') - 1
-      }
-      if (reb_freq == 'A') {
+      } else if (reb_freq == 'A') {
         dt_vec <- seq(date_start, date_end, 'years')
       }
+      
+      if (reb_freq == 'BH') {
+        self$reb_wgt <- reb_wgt
+        return(invisible(self))
+      }
+      
+      if (nrow(reb_wgt) == 1) {
+        reb_mat <- matrix(reb_wgt, nrow = length(dt_vec), 
+                          ncol = ncol(self$asset_ret), byrow = TRUE)
+        reb_wgt <- xts(reb_mat, dt_vec)
+      } else if (nrow(reb_wgt) > 1) {
+        add_reb <- xts(matrix(as.numeric(NA), nrow = length(dt_vec), 
+                              ncol = ncol(self$asset_ret)), 
+                       dt_vec)
+        is_dup <- zoo::index(add_reb) %in% zoo::index(reb_wgt)
+        reb_combo <- rbind(add_reb[!is_dup, ], reb_wgt)
+        if (all(is.na(reb_combo[1, ]))) {
+          reb_combo[1, ] <- reb_wgt[1, ]
+        }
+        reb_wgt <- fill_na_price(reb_combo)
+      } else {
+        warning('rebalance weights are not a vector or xts, did not create weights')
+        return()
+      }
+      self$reb_wgt <- reb_wgt
+      invisible(self)
+    },
+    
+    rebal = function(asset_ret = NULL, reb_wgt = NULL, align_wgt = TRUE, 
+                     sum_to_1 = TRUE, clean_asset_ret = TRUE, eps = 0.05) {
+      
+      if (!is.null(asset_ret)) {
+        self$asset_ret <- asset_ret
+      }
+      if (!is.null(reb_wgt)) {
+        self$reb_wgt <- reb_wgt
+      }
+      asset_ret <- self$asset_ret
+      reb_wgt <- self$reb_wgt
+      
+      if (clean_asset_ret) {
+        self <- self$clean_asset_ret(asset_ret, eps)
+        asset_ret <- self$asset_ret
+      }
+      
+      if (align_wgt) {
+        self$align_reb_wgt(sum_to_1)
+      }
+      self$check_wgt_ret()
+      
+      reb_dt <- zoo::index(reb_wgt)
+      ret_dt <- zoo::index(asset_ret)
+      n_obs <- nrow(asset_ret)
+      reb_counter <- 1
+      # asset index is the end of period wealth value
+      asset_idx <- matrix(nrow = n_obs + 1, ncol = ncol(asset_ret)) 
+      asset_idx[1, ] <- 100 * reb_wgt[1, ]
+      # asset weight is beginning of period weight
+      asset_wgt <- matrix(nrow = n_obs, ncol = ncol(asset_ret))
+      # assumes rebalance happens at beginning of each day (or month, year, etc), 
+      # and then that day's return is applied to create an end of day wealth value
+      for (i in 1:n_obs) {
+        asset_idx[i + 1, ] <- asset_idx[i, ] * (1 + asset_ret[i, ])
+        asset_wgt[i, ] <- asset_idx[i, ] / sum(asset_idx[i, ])
+        if (reb_counter <= length(reb_dt) & reb_dt[reb_counter] <= ret_dt[i]) {
+          asset_idx[i + 1, ] <- sum(asset_idx[i, ]) * 
+            reb_wgt[reb_counter, ] * (1 + asset_ret[i, ])
+          asset_wgt[i, ] <- reb_wgt[reb_counter, ]
+          reb_counter <- reb_counter + 1
+        }
+      }
+      asset_wgt <- xts(asset_wgt, zoo::index(asset_ret))
+      dt_rng <- c(ret_dt[1] - 1, ret_dt)
+      port_wealth <- xts(rowSums(asset_idx), dt_rng)
+      # contr to ret = portfolio wealth at end of last period *
+      # weight at beginning of current period * current period return
+      # port_wealth is lagged, so i = last period
+      ctr_mat <- matrix(nrow = n_obs, ncol = ncol(asset_ret)) 
+      for (i in 1:n_obs) {
+        ctr_mat[i, ] <- as.numeric(port_wealth[i]) * asset_wgt[i, ] * 
+          asset_ret[i, ]
+      }
+      self$perf_stats$ctr_mat <- ctr_mat
+      self$asset_ret <- asset_ret
+      self$reb_wgt <- reb_wgt
+      self$port_wealth <- port_wealth
     }
+    
+    
   )
 )
 
-cut_time <- function(x, date_start = NULL, date_end = NULL) {
-  if (is.null(date_start) & is.null(date_end)) return(x)
-  if (is.null(date_start)) return(x[paste0(date_start, '/')])
-  if (is.null(date_end)) return(x[paste0('/', date_end)])
-  return(x[paste0(date_start, '/', date_end)])
-}
 
-download_tiingo <- function(ticker, t_api) {
-  t_url <- paste0('https://api.tiingo.com/tiingo/daily/',
-                  ticker,
-                  '/prices?startDate=1970-01-01',
-                  '&endDate=2023-09-26',
-                  '&token=', t_api)
-  dat <- jsonlite::read_json(t_url)
-  date_raw <- sapply(dat, '[[', 'date')
-  date_vec <- as.Date(date_raw)
-  price_vec <- sapply(dat, '[[', 'adjClose')
-  price <- xts(price_vec, date_vec)
-  colnames(price) <- ticker
-  ret <- price / lag.xts(price, 1) - 1
-  return(ret[-1, ])
-}
 
-clean_ret <- function(x, eps = 0.05) {
-  bad_col <- colSums(is.na(x)) / nrow(x) > eps
-  miss_dat <- x[, bad_col]
-  dat <- x[, !bad_col]
-  fill_dat <- dat[is.na(dat)] <- 0
-  res <- list()
-  res$ret <- fill_dat
-  res$miss_ret <- miss_dat
-  return(res)
-} 

@@ -135,6 +135,19 @@ price_to_ret <- function(x) {
   ret[2:nrow(ret), ]
 }
 
+#' @title Convert returns to a price index
+#' @param x xts of returns
+#' @return a price index calculating from \code{x} and a initial value of 1
+#' @export
+ret_to_price <- function(x) {
+
+  price <- apply(x + 1, 2, cumprod)
+  first_row <- xts(matrix(1, ncol = ncol(x)), zoo::index(x)[1] - 1)
+  price_out <- rbind(first_row, price)
+  colnames(price_out) <- colnames(x)
+  return(price_out)
+}
+
 #' @title Change Character Frequency into Numeric Scaler
 #' @param period days, weeks, months, quarters, years
 #' @return corresponding numeric value, e.g., months = 12
@@ -169,9 +182,21 @@ xts_to_dataframe <- function(x) {
 #' @return xts
 #' @export
 mat_to_xts <- function(x) {
-  xts(x[, -1], as.Date(x[, 1]))
+  xts(x[, -1], as.Date(x[[1]]))
 }
 
+#' @title Convert returns to a price index
+#' @param x xts of returns
+#' @return a price index calculating from \code{x} and a initial value of 1
+#' @export
+ret_to_price <- function(x) {
+
+  price <- apply(x + 1, 2, cumprod)
+  first_row <- xts(matrix(1, ncol = ncol(x)), zoo::index(x)[1] - 1)
+  price_out <- rbind(first_row, price)
+  colnames(price_out) <- colnames(x)
+  return(price_out)
+}
 
 #' @title Get US Trading Days based on NYSE Holidays
 #' @param date_start beginning date of sequence
@@ -198,3 +223,44 @@ last_us_trading_day <- function() {
                            weekdays = c('saturday', 'sunday'))
   bizdays::adjust.previous(Sys.Date() - 1, 'cal')
 }
+
+
+#' @title Change time-series frequency
+#' @param x xts object
+#' @param period character string of the desired time-series periods
+#' @param dtype character string of "return" or "price" to represent the data type
+#' @return xts object with new frequency
+#' @importFrom lubridate ceiling_date
+#' @export
+change_freq <- function(x, period = 'months', dtype = c('return', 'price')) {
+
+  dtype <- tolower(dtype[1])
+  if (dtype == 'return') {
+    price <- ret_to_price(x)
+  } else {
+    price <- x
+  }
+  eo <- endpoints(price, on = period)
+  price_new_freq <- price[eo, ]
+  if (dtype == 'return') {
+    data_out <- price_to_ret(price_new_freq)
+  } else {
+    data_out <- price_new_freq
+  }
+  if (tolower(period) %in% c('months', 'quarters', 'years')) {
+    zoo::index(data_out) <- lubridate::ceiling_date(zoo::index(data_out),
+                                                    'months') - 1
+  }
+  return(data_out)
+}
+
+#' @title Find first common start date
+#' @export
+first_comm_start <- function(x) {
+  first_days <- rep(NA, ncol(x))
+  for (i in 1:ncol(x)) {
+    first_days[i] <- zoo::index(na.omit(x[, i]))[1]
+  }
+  return(max(as.Date(first_days, origin = '1970-01-01')))
+}
+

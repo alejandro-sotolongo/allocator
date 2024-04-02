@@ -3,7 +3,7 @@ Type: Package
 Title: Quantitative Investment Analytics
 Version: 0.1.0
 Author: Alejandro Sotolongo
-Maintainer: Alejandro Sotolongo asotolongo@diversifiedtrust.com
+Maintainer: Alejandro Sotolongo <asotolongo@diversifiedtrust.com>
 Description: Allocator is a collection of functions for asset allocators to 
     analyze investment returns and holdings. The functions are designed for 
     workflows that include downloading and reading in data, performance

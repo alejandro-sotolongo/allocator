@@ -89,7 +89,11 @@ na_price <- function(x) {
 #'   default is union
 #' @return Row binded combination of `x` and `y`
 #' @export
-rbind_xts <- function(x, y, inter = FALSE) {
+xts_rbind <- function(x, y, inter = FALSE, overwrite = TRUE) {
+  if (overwrite) {
+    row_overlap <- zoo::index(x) %in% zoo::index(y)
+    x <- x[!row_overlap]
+  }
   if (inter) {
     col_nm <- intersect(colnames(x), colnames(y))
     if (length(col_nm) == 0) {
@@ -113,7 +117,7 @@ rbind_xts <- function(x, y, inter = FALSE) {
 #' the spaces or special characters in the original column names.
 #' @return xts with `cbind(x, y)` with original column names of `x` and `y`
 #' @export
-cbind_xts <- function(x, y) {
+xts_cbind <- function(x, y) {
   col_nms <- c(colnames(x), colnames(y))
   combo <- cbind(x, y)
   colnames(combo) <- col_nms
@@ -183,4 +187,14 @@ us_trading_days <- function(date_start = NULL, date_end = NULL) {
   holidays <- timeDate::holidayNYSE(year_start:year_end)
   busday <- timeDate::isBizday(timeDate::timeDate(all_days), as.Date(holidays@Data))
   all_days[busday]
+}
+
+
+#' @title Get Last U.S. Trading Day
+#' @export
+last_us_trading_day <- function() {
+  yr <- lubridate::year(Sys.Date())
+  bizdays::create.calendar('cal', holidays = timeDate::holidayNYSE((yr-1):yr),
+                           weekdays = c('saturday', 'sunday'))
+  bizdays::adjust.previous(Sys.Date() - 1, 'cal')
 }

@@ -264,3 +264,12 @@ first_comm_start <- function(x) {
   return(max(as.Date(first_days, origin = '1970-01-01')))
 }
 
+#' @export
+f_percent <- function(x, d) {
+  paste0(round(x * 100, d), '%')
+}
+
+#' @export
+f_num <- function(x, d) {
+  as.character(round(x, d))
+}

@@ -130,7 +130,10 @@ Portfolio <- R6::R6Class(
       }
       # NULL rebalance handle as buy and hold, or don't add additional dates to rebal
       if (is.null(reb_freq)) {
-        reb_freq <- 'BH'
+        reb_freq <- self$reb_freq
+        if (is.null(reb_freq)) {
+          reb_freq <- 'BH'
+        }
       }
       if (is.null(reb_wgt)) {
         reb_wgt <- self$reb_wgt

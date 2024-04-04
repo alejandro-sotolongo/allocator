@@ -656,37 +656,51 @@ daily_spline <- function(d_ret, m_ret, thresh = 0.0000001) {
 }
 
 
+#' @export
+summary_stats <- function(fund, bench, rf, period) {
 
-mgr_perf_stats = function(mgr, period, bench = NULL, rf = NULL,
-                          date_start = NULL, date_end = NULL) {
+  n_funds <- ncol(fund)
+  combo <- na.omit(cbind(fund, bench, rf))
   a <- freq_to_scaler(period)
-  if (is.null(rf)) {
-    rf <- xts(rep(0, nrow(mgr)), zoo::index(mgr))
-    colnames(rf) <- 'Rf'
-  }
-  if (ncol(rf) > 1) {
-    warning('rf time-series has more than one column, taking first column as rf')
-    rf <- rf[, 1]
-  }
-  if (!is.null(bench)) {
-    combo <- cbind_xts(mgr, rf)
-    combo <- cbind_xts(combo, bench)
-    is_bench <- TRUE
+  if (nrow(combo) > a) {
+    geo_ret <- calc_geo_ret(combo[, 1:(n_funds+1)], period)
   } else {
-    combo <- cbind_xts(mgr, rf)
-    is_bench <- FALSE
+    geo_ret <- apply(combo[, 1:(n_funds+1)] + 1, 2, prod) - 1
   }
-  combo <- cut_time(combo, date_start, date_end)
-  rf_col <- ncol(mgr) + 1
-  if (nrow(combo) >= a) {
-    geo_ret <- calc_geo_ret(combo, period)
-  } else {
-    geo_ret <- apply(combo + 1, 2, prod) - 1
-  }
-  vol <- calc_vol(combo, period)
-  down_vol <- calc_down_vol(combo, period)
-  sharpe <- calc_sharpe_ratio(combo, rf, period)
-  sortino <- calc_sortino_ratio(combo, rf, period)
-  xvar <- PerformanceAnalytics::VaR(combo, method = 'modified') * sqrt(a/12)
-  worst_dd <- calc_max_drawdown(combo)
+  xcov <- cov(combo[, 1:(n_funds+1)])
+  vol <- sqrt(diag(xcov) * a)
+  xvar <- PerformanceAnalytics::VaR(combo[, 1:(n_funds+1)]) * sqrt(a / 12)
+  up_capt <- calc_up_capture(combo[, 1:(n_funds+1)], combo[, n_funds + 1], period)
+  down_capt <- calc_down_capture(combo[, 1:(n_funds+1)], combo[, n_funds + 1], period)
+  xbeta <- xcov[, n_funds + 1] / xcov[n_funds + 1, n_funds + 1]
+  ar <- calc_geo_ret(combo[, 1:(n_funds+1)] - combo[, rep(n_funds + 1, n_funds+1)],
+                     period)
+  acov <- cov(combo[, 1:(n_funds+1)] - combo[, rep(n_funds + 1, n_funds+1)])
+  te <- sqrt(diag(acov) * a)
+  ir <- ar / te
+  rf_geo <- calc_geo_ret(combo[, n_funds + 2], period)
+  sharpe <- (geo_ret - rf_geo) / vol
+  sortino <- calc_sortino_ratio(combo[, 1:(n_funds + 1)], combo[, n_funds + 2],
+                                period)
+  dd <- calc_drawdown(combo[, 1:(n_funds + 1)])
+  maxdd <- apply(dd, 2, min)
+  calmar <- geo_ret / -maxdd
+
+  df <- data.frame(
+    Geo.Ret = f_percent(geo_ret, 2),
+    Volatility = f_percent(vol, 2),
+    Beta = f_num(xbeta, 2),
+    VaR.Month.95 = f_percent(as.numeric(xvar), 2),
+    Max.Drawdown = f_percent(maxdd, 2),
+    Sharpe.Ratio = f_num(sharpe, 2),
+    Sortino.Ratio = f_num(sortino, 2),
+    Calmar = f_num(calmar, 2),
+    TE = f_percent(te, 2),
+    Info.Ratio = f_num(ir, 2),
+    Up.Capture = f_percent(up_capt, 2),
+    Down.Capture = f_percent(down_capt, 2)
+  )
+  df <- t(df)
+  colnames(df) <- c(colnames(fund), colnames(bench))
+  return(df)
 }

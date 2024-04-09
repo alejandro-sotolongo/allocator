@@ -254,6 +254,7 @@ change_freq <- function(x, period = 'months', dtype = c('return', 'price')) {
   return(data_out)
 }
 
+
 #' @title Find first common start date
 #' @export
 first_comm_start <- function(x) {
@@ -264,12 +265,29 @@ first_comm_start <- function(x) {
   return(max(as.Date(first_days, origin = '1970-01-01')))
 }
 
+
 #' @export
 f_percent <- function(x, d) {
   paste0(round(x * 100, d), '%')
 }
 
+
 #' @export
 f_num <- function(x, d) {
   as.character(round(x, d))
+}
+
+
+#' @title Read excel time-series
+#' @param wb workbook full file name, e.g.,
+#'   'C:/users/asotolongo/documents/wb.xslx'
+#' @param sht worksheet number or name
+#' @param skip number of header rows to skip, default is 0
+#' @details
+#' See `readxl::read_excel` for more info. Format of workbook needs to have
+#'   date column in first row.
+#' @export
+read_xts <- function(wb, sht = 1, skip = 0) {
+  dat <- readxl::read_excel(wb, sheet = sht, col_types = 'numeric', skip = skip)
+  xts(dat[, -1], as.Date(dat[[1]], origin = '1899-12-30'))
 }

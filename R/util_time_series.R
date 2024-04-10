@@ -17,9 +17,15 @@
 #' }
 #' @export
 cut_time <- function(x, date_start = NULL, date_end = NULL) {
-  if (is.null(date_start) & is.null(date_end)) return(x)
-  if (is.null(date_start)) return(x[paste0(date_start, '/')])
-  if (is.null(date_end)) return(x[paste0('/', date_end)])
+  if (is.null(date_start) & is.null(date_end)) { 
+    return(x)
+  }
+  if (is.null(date_start)) {
+    return(x[paste0('/', date_end)])
+  }
+  if (is.null(date_end)) {
+    return(x[paste0(date_start, '/')])
+  }
   return(x[paste0(date_start, '/', date_end)])
 }
 

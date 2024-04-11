@@ -8,14 +8,10 @@ Portfolio <- R6::R6Class(
     asset_wgt = xts(),
     port_ret = xts(),
     port_wealth = xts(),
-    perf_stats = NULL,
+    perf_stats = list(),
+    reb_stats = list(),
     risk_stats = NULL,
-    frontier = NULL,
-    risk_obj = c('vol', 'var', 'cvar', 'te', 'te.var', 'te.cvar'),
-    exp_mu = NULL,
-    exp_cov = NULL,
-    cap_cons = NULL,
-    risk_cons = NULL,
+    opt = list(),
     hist_mu = NULL,
     hist_cov = NULL,
     ret_freq = NULL,
@@ -27,11 +23,6 @@ Portfolio <- R6::R6Class(
     initialize = function(
       name = 'port',
       asset_ret = NULL,
-      risk_obj = c('vol', 'var', 'cvar', 'te', 'te.var', 'te.cvar'),
-      exp_mu = NULL,
-      exp_cov = NULL,
-      cap_cons = NULL,
-      risk_cons = NULL,
       ret_freq = c('D', 'M', 'Q', 'A'),
       reb_freq = c(NULL, 'D', 'M', 'Q', 'A'),
       reb_wgt = NULL,
@@ -259,7 +250,8 @@ Portfolio <- R6::R6Class(
         ctr_mat[i, ] <- as.numeric(port_wealth[i]) * asset_wgt[i, ] *
           asset_ret[i, ]
       }
-      self$perf_stats$ctr_mat <- ctr_mat
+      self$reb_stats$ctr_mat <- ctr_mat
+      self$reb_stats$asset_idx <- asset_idx
       self$asset_ret <- asset_ret
       self$reb_wgt <- reb_wgt
       self$port_wealth <- port_wealth

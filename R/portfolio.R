@@ -192,10 +192,13 @@ Portfolio <- R6::R6Class(
         if (all(is.na(reb_combo[1, ]))) {
           reb_combo[1, ] <- reb_wgt[1, ]
         }
-        reb_wgt <- fill_na_price(reb_combo)
+        reb_xts <- fill_na_price(reb_combo)
+        colnames(reb_xts) <- colnames(reb_wgt)
+        reb_wgt <- reb_xts
       # final else for error handling if input is not a vector or xts
       } else {
-        warning('rebalance weights are not a vector or xts, did not create weights')
+        warning('rebalance weights are not a vector or xts, 
+                did not create weights')
         return()
       }
       self$reb_wgt <- reb_wgt

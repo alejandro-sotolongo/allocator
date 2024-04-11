@@ -33,10 +33,6 @@ Portfolio <- R6::R6Class(
       if (is.null(rf)) rf <- xts()
       self$name <- name
       self$asset_ret <- asset_ret
-      self$risk_obj <- risk_obj
-      self$exp_mu <- exp_mu
-      self$exp_cov <- exp_cov
-      self$risk_cons <- risk_cons
       self$ret_freq <- ret_freq[1]
       self$reb_freq <- reb_freq[1]
       self$reb_wgt <- reb_wgt

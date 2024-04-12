@@ -83,7 +83,7 @@ Portfolio <- R6::R6Class(
         if (length(self$reb_wgt) != ncol(self$asset_ret))
           stop('length of $reb_wgt and $asset_ret columns do not match')
         if (sum_to_1) {
-          self$reb_wgt <- self$reb_wgt / sum(self$reb_wgt)
+          self$reb_wgt <- self$reb_wgt / rowSums(self$reb_wgt)
         }
       }
       invisible(self)
@@ -184,7 +184,7 @@ Portfolio <- R6::R6Class(
         reb_wgt <- reb_xts
       # final else for error handling if input is not a vector or xts
       } else {
-        warning('rebalance weights are not a vector or xts, 
+        warning('rebalance weights are not a vector or xts,
                 did not create weights')
         return()
       }
@@ -211,6 +211,7 @@ Portfolio <- R6::R6Class(
 
       if (align_wgt) {
         self$align_reb_wgt(sum_to_1)
+        reb_wgt <- self$reb_wgt
       }
       self$check_wgt_ret()
 

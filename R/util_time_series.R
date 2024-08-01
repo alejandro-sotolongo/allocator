@@ -17,7 +17,7 @@
 #' }
 #' @export
 cut_time <- function(x, date_start = NULL, date_end = NULL) {
-  if (is.null(date_start) & is.null(date_end)) { 
+  if (is.null(date_start) & is.null(date_end)) {
     return(x)
   }
   if (is.null(date_start)) {
@@ -88,30 +88,44 @@ na_price <- function(x) {
   rep(x[ind], times = diff(c(ind, length(x) + 1)))
 }
 
-#' @title Row bind xts objects
-#' @param x xts object
-#' @param y xts object
-#' @param inter boolean to designate intersection, TRUE, or union, FALSE,
-#'   default is union
-#' @return Row binded combination of `x` and `y`
 #' @export
-xts_rbind <- function(x, y, inter = FALSE, overwrite = TRUE) {
-  if (overwrite) {
-    row_overlap <- zoo::index(x) %in% zoo::index(y)
-    x <- x[!row_overlap]
-  }
+df_to_xts <- function(df) {
+  ix <- is.na(df[[1]])
+  df <- df[!ix, ]
+  res <- xts(df[, -1], as.Date(df[[1]]))
+  colnames(res) <- colnames(df)[-1]
+  res
+}
+
+
+#' @export
+xts_rbind <- function(old, new, inter = FALSE, overwrite = TRUE) {
   if (inter) {
-    col_nm <- intersect(colnames(x), colnames(y))
-    if (length(col_nm) == 0) {
-      stop('no intersection of column names')
-    }
-    return(rbind(x[, col_nm], y[, col_nm]))
+    stop('code not complete for intersection')
   } else {
-    col_nm <- unique(c(colnames(x), colnames(y)))
-    x_match <- match(col_nm, colnames(x))
-    y_match <- match(col_nm, colnames(y))
-    rbind(x[, x_match], y[, y_match])
+    ix_new <- na.omit(match(colnames(old), colnames(new)))
+    ix_old <- na.omit(match(colnames(new), colnames(old)))
+    dt_ix_new <- na.omit(match(index(old), index(new)))
+    dt_ix_old <- na.omit(match(index(new), index(old)))
+    if (length(ix_new) > 0) {
+      if (length(dt_ix_new) > 0) {
+        old[dt_ix_old, ix_old] <- new[dt_ix_new, ix_new]
+      } else {
+        warning('no overlapping dates')
+      }
+      new_dt <- !index(new) %in% index(old)
+      n <- sum(new_dt)
+      old_add <- matrix(nrow = n, ncol = ncol(old))
+      old_add[, ix_old] <- new[new_dt, ix_new]
+      old_add <- xts(old_add, zoo::index(new)[new_dt])
+      colnames(old_add) <- colnames(old)
+      old <- rbind(old, old_add)
+    } else {
+      warning('no overlapping columns')
+    }
+    res <- cbind(old, new[, -ix_new])
   }
+  return(res)
 }
 
 #' @title Column bind xts objects while preserving columns names

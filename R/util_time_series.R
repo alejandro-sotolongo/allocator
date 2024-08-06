@@ -124,6 +124,7 @@ xts_rbind <- function(old, new, inter = FALSE, overwrite = TRUE) {
       warning('no overlapping columns')
     }
     res <- cbind(old, new[, -ix_new])
+    colnames(res) <- c(colnames(old), colnames(new)[-ix_new])
   }
   return(res)
 }

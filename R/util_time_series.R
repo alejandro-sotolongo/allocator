@@ -286,6 +286,15 @@ first_comm_start <- function(x) {
   return(max(as.Date(first_days, origin = '1970-01-01')))
 }
 
+#' @title Find last common end date
+#' @export
+last_comm_end <- function(x) {
+  last_days <- rep(NA, ncol(x))
+  for (i in 1:ncol(x)) {
+    last_days[i] <- zoo::index(na.omit(x[, i]))[nrow(na.omit(x[, i]))]
+  }
+  return(min(as.Date(last_days, origin = "1970-01-01")))
+}
 
 #' @export
 f_percent <- function(x, d) {

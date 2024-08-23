@@ -602,12 +602,21 @@ run_cluster <- function(ret, k_group) {
 }
 
 #' @export
-clean_ret_na_col <- function(ret, thresh = .05) {
+clean_ret_na_col <- function(ret, thresh = .05, comm_start = TRUE, 
+                             comm_end = TRUE) {
 
+  if (comm_start) {
+    first_date <- first_comm_start(ret)
+    ret <- cut_time(x, first_date)
+  }
+  if (comm_end) {
+    last_date <- last_comm_end(ret)
+    ret <- cut_time(x, last_date)
+  }
   thresh_num <- floor(thresh * nrow(ret))
   bad_col <- rep(FALSE, ncol(ret))
   for (i in 1:ncol(ret)) {
-    miss <- is.na(ret[, i])
+    miss <- sum(is.na(ret[, i]))
     if (miss > thresh_num) {
       bad_col[i] <- TRUE
     } else {

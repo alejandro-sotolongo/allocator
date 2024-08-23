@@ -169,6 +169,7 @@ ret_to_price <- function(x) {
   return(price_out)
 }
 
+
 #' @title Change Character Frequency into Numeric Scaler
 #' @param period days, weeks, months, quarters, years
 #' @return corresponding numeric value, e.g., months = 12

@@ -1,23 +1,39 @@
+#' Portfolio Object
+#' @description
+#' Investment portfolio
+#' 
 #' @import xts
 #' @export
 Portfolio <- R6::R6Class(
   'Portfolio',
   public = list(
+    #' @field name name of portfolio for display
     name = 'port',
+    #' @field asset_ret xts of asset returns
     asset_ret = xts(),
+    #' @field asset_wgt xts of weights for corresponding asset returns
     asset_wgt = xts(),
+    #' @field port_ret xts of portfolio returns as a result of rebalancing
     port_ret = xts(),
+    #' @field port_wealth xts of cumulative portfolio returns
     port_wealth = xts(),
+    #' @field perf_stats list with performance reports
     perf_stats = list(),
+    #' @field reb_stats list with rebalance stats for attribution
     reb_stats = list(),
-    risk_stats = NULL,
+    #' @field risk_stats list multi-variate risk stats
+    risk_stats = list,
+    #' @field opt list with optimization output
     opt = list(),
-    hist_mu = NULL,
-    hist_cov = NULL,
+    #' @field ret_freq return frequency
     ret_freq = NULL,
+    #' @field reb_freq optional field for automatic rebalancing frequency
     reb_freq = NULL,
+    #' @field reb_wgt xts of rebalance weights
     reb_wgt = NULL,
+    #' @field rf xts of risk-free time-series
     rf = xts(),
+    #' @field benchmark optional field for benchmark (also a Portfolio Object)
     benchmark = NULL,
 
     initialize = function(
@@ -55,10 +71,18 @@ Portfolio <- R6::R6Class(
       invisible(self)
     },
 
+    #' @description
+        #' Align rebalance weights with corresponding asset returns
+    #' @field sum_to_1 boolean to re-calculate weights to pro-rata sum to 1 if
+    #'   any returns or weights are missing
+    #' @details
+    #'   Weights are either a named vector or xts time-series. The alignment
+    #'   will look for the intersection of names. Any names not found in the 
+    #'   intersection will be removed. If sum_to_1 is set to TRUE the weights will
+    #'   be recalculated to sum to 100%. If the vector is not named a 
+    #'   warning will be issued and the length of the weights and number of 
+    #'   columns of the returns will be checked.
     align_reb_wgt = function(sum_to_1 = TRUE) {
-      # check for asset returns
-      # sum_to_1 = boolean to reconstitute weights to sum to 100% if a weight
-      #   needs to be removed b/c it was not found in the return time-series
       if (is.null(self$asset_ret) || is_null_dim(self$asset_ret)) {
         warning('no asset_returns found')
         return()
@@ -80,10 +104,29 @@ Portfolio <- R6::R6Class(
           self$reb_wgt <- self$reb_wgt / rowSums(self$reb_wgt, na.rm = TRUE)
         }
       } else if (is.vector(self$reb_wgt)) {
-        if (length(self$reb_wgt) != ncol(self$asset_ret))
-          stop('length of $reb_wgt and $asset_ret columns do not match')
-        if (sum_to_1) {
-          self$reb_wgt <- self$reb_wgt / rowSums(self$reb_wgt)
+        if (is.null(names(self$reb_wgt))) {
+          warning('reb_wgt is missing names, assuming they are lined up
+                   with asset_ret')
+          if (length(self$reb_wgt) != ncol(self$asset_ret)) {
+            stop('length of $reb_wgt and $asset_ret columns do not match')
+          }
+        } else {
+          inter <- intersect(names(self$reb_wgt), colnames(self$asset_ret))
+          if (length(inter) == 0) {
+            print(names(self$reb_wgt))
+            print(names(self$asset_ret))
+            print('no intersection between asset_ret and reb_wgt')
+            return(NULL)
+          }
+          unn <- union(names(self$reb_wgt), colnames(self$asset_ret))
+          if (length(unn) > length(inter)) {
+            warning(c(unn[!unn %in% inter], ' not in intersection'))
+          }
+          self$reb_wgt <- self$reb_wgt[inter]
+          self$asset_ret <- self$asset_ret[, inter]
+          if (sum_to_1) {
+            self$reb_wgt <- self$reb_wgt / sum(self$reb_wgt, na.rm = TRUE)
+          }
         }
       }
       invisible(self)
@@ -113,8 +156,9 @@ Portfolio <- R6::R6Class(
 
       if (is.null(self$asset_ret) || is_null_dim(self$asset_ret)) {
         warning('no asset returns found')
-        return()
+        return(NULL)
       }
+      
       # NULL rebalance handle as buy and hold, or don't add additional dates to rebal
       if (is.null(reb_freq)) {
         reb_freq <- self$reb_freq
@@ -122,27 +166,25 @@ Portfolio <- R6::R6Class(
           reb_freq <- 'BH'
         }
       }
+      reb_freq <- check_reb_freq(reb_freq)
+      
       if (is.null(reb_wgt)) {
         reb_wgt <- self$reb_wgt
       }
+      
+      # make sure weight and return columns match
+      self$align_reb_wgt()
+      
       # set start and end dates based on returns
       date_start <- zoo::index(self$asset_ret)[1]
       date_end <- zoo::index(self$asset_ret)[nrow(self$asset_ret)]
       # if rebalance weights are a vector, convert into one row xts
       if (is.vector(reb_wgt)) {
-        if (length(reb_wgt) != ncol(self$asset_ret)) {
-          warning('vector of weights does not match number of assets')
-          return()
-        }
         reb_wgt <- xts(matrix(reb_wgt, nrow = 1), date_start)
         colnames(reb_wgt) <- colnames(self$asset_ret)
         self$reb_wgt <- reb_wgt
       }
 
-      # make sure weight and return columns match
-      self$align_reb_wgt()
-
-      reb_freq <- check_reb_freq(reb_freq)
       # handle rebalance frequency, create date vector to match freq
       if (reb_freq == 'D') {
         dt_vec <- zoo::index(self$asset_ret)

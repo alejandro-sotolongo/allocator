@@ -2,7 +2,6 @@
 #' @description
 #' Investment portfolio
 #' 
-#' @import xts
 #' @export
 Portfolio <- R6::R6Class(
   'Portfolio',
@@ -22,7 +21,7 @@ Portfolio <- R6::R6Class(
     #' @field reb_stats list with rebalance stats for attribution
     reb_stats = list(),
     #' @field risk_stats list multi-variate risk stats
-    risk_stats = list,
+    risk_stats = list(),
     #' @field opt list with optimization output
     opt = list(),
     #' @field ret_freq return frequency

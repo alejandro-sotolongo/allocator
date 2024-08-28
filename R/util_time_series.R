@@ -97,7 +97,14 @@ df_to_xts <- function(df) {
   res
 }
 
-
+#' @title Row bind xts
+#' @param old older time-series
+#' @param new newer time-series
+#' @details
+#' For any overlapping dates, the old xts will be overwritten by the new xts.
+#' The function will align the intersection of column names for the old and new 
+#' xts objects. For any column names that do not intersect NAs will be added 
+#' to the new or old xts depending on which xts is missing the column name(s).
 #' @export
 xts_rbind <- function(old, new) {
   nm_union <- unique(c(colnames(new), colnames(old)))
@@ -116,6 +123,12 @@ xts_rbind <- function(old, new) {
     old <- xts_cbind(old, old_add)
   }
   new <- new[, colnames(old)]
+  dt_inter <- intersect(as.Date(zoo::index(new)), as.Date(zoo::index(old)))
+  if (length(dt_inter) > 0) {
+    dt_inter <- as.Date(dt_inter)
+    kp_dt <- !as.Date(zoo::index(old)) %in% dt_inter
+    old <- old[kp_dt, ]
+  }
   rbind(old, new)
 }
 

@@ -99,35 +99,26 @@ df_to_xts <- function(df) {
 
 
 #' @export
-xts_rbind <- function(old, new, inter = FALSE, overwrite = TRUE) {
-  if (inter) {
-    stop('code not complete for intersection')
-  } else {
-    ix_new <- na.omit(match(colnames(old), colnames(new)))
-    ix_old <- na.omit(match(colnames(new), colnames(old)))
-    dt_ix_new <- na.omit(match(index(old), index(new)))
-    dt_ix_old <- na.omit(match(index(new), index(old)))
-    if (length(ix_new) > 0) {
-      if (length(dt_ix_new) > 0) {
-        old[dt_ix_old, ix_old] <- new[dt_ix_new, ix_new]
-      } else {
-        warning('no overlapping dates')
-      }
-      new_dt <- !index(new) %in% index(old)
-      n <- sum(new_dt)
-      old_add <- matrix(nrow = n, ncol = ncol(old))
-      old_add[, ix_old] <- new[new_dt, ix_new]
-      old_add <- xts(old_add, zoo::index(new)[new_dt])
-      colnames(old_add) <- colnames(old)
-      old <- rbind(old, old_add)
-    } else {
-      warning('no overlapping columns')
-    }
-    res <- cbind(old, new[, -ix_new])
-    colnames(res) <- c(colnames(old), colnames(new)[-ix_new])
+xts_rbind <- function(old, new) {
+  nm_union <- unique(c(colnames(new), colnames(old)))
+  new_miss <- !nm_union %in% colnames(new)
+  old_miss <- !nm_union %in% colnames(old)
+  if (any(new_miss)) {
+    new_add <- matrix(nrow = nrow(new), ncol = sum(new_miss))
+    new_add <- xts(new_add, zoo::index(new))
+    colnames(new_add) <- nm_union[new_miss]
+    new <- xts_cbind(new, new_add)
   }
-  return(res)
+  if (any(old_miss)) {
+    old_add <- matrix(nrow = nrow(old), ncol = sum(old_miss))
+    old_add <- xts(old_add, zoo::index(old))
+    colnames(old_add) <- nm_union[old_miss]
+    old <- xts_cbind(old, old_add)
+  }
+  new <- new[, colnames(old)]
+  rbind(old, new)
 }
+
 
 #' @title Column bind xts objects while preserving columns names
 #' @param x xts object

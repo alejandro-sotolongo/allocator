@@ -15,8 +15,6 @@
 
 #' @export
 rebal <- function(wgt, r, gain_thresh) { 
-
-  gain_thresh <- 0
   
   cr <- ret_to_price(r)
   
@@ -132,4 +130,9 @@ rebal <- function(wgt, r, gain_thresh) {
       print(i)
     }
   }
+  res <- list()
+  res$asset_wgt <- asset_wgt
+  res$asset_idx <- asset_idx
+  res$stock_list <- stock_list
+  return(res)
 }

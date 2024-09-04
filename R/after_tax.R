@@ -68,24 +68,26 @@ rebal <- function(wgt, r, gain_thresh) {
       sell_value <- val_delta[is_sell]
       sell_name <- colnames(wgt)[is_sell]
       val_sold <- rep(0, length(sell_name))
-      for (stock in 1:length(sell_name)) {
-        xdf <- stock_list[[sell_name[stock]]]
-        xdf <- xdf[order(xdf$BasisPerShare, decreasing = FALSE), ]
-        price <- cr[i, sell_name[stock]]
-        for (basis in 1:nrow(xdf)) {
-          if (abs(val_sold[stock] + sell_value[stock]) < 0.0001) {
-            break
-          }
-          obs <- xdf[basis, ]
-          if (obs$CurrentShares <= 0.00001) {
-            next
-          }
-          if (price - gain_thresh <= obs$BasisPerShare) {
-            shares_sold <- min(obs$CurrentShares, -sell_value[stock] / price)
-            xdf[basis, 'SharesSold'] <- obs$SharesSold + shares_sold
-            xdf[basis, 'CurrentShares'] <- obs$CurrentShares - shares_sold
-            val_sold[stock] <- val_sold[stock] + shares_sold * price
-            stock_list[[sell_name[stock]]] <- xdf
+      if (any(is_sell)) {
+        for (stock in 1:length(sell_name)) {
+          xdf <- stock_list[[sell_name[stock]]]
+          xdf <- xdf[order(xdf$BasisPerShare, decreasing = FALSE), ]
+          price <- cr[i, sell_name[stock]]
+          for (basis in 1:nrow(xdf)) {
+            if (abs(val_sold[stock] + sell_value[stock]) < 0.0001) {
+              break
+            }
+            obs <- xdf[basis, ]
+            if (obs$CurrentShares <= 0.00001) {
+              next
+            }
+            if (price - gain_thresh <= obs$BasisPerShare) {
+              shares_sold <- min(obs$CurrentShares, -sell_value[stock] / price)
+              xdf[basis, 'SharesSold'] <- obs$SharesSold + shares_sold
+              xdf[basis, 'CurrentShares'] <- obs$CurrentShares - shares_sold
+              val_sold[stock] <- val_sold[stock] + shares_sold * price
+              stock_list[[sell_name[stock]]] <- xdf
+            }
           }
         }
       }

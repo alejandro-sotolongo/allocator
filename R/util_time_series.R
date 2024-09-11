@@ -106,30 +106,21 @@ df_to_xts <- function(df) {
 #' xts objects. For any column names that do not intersect NAs will be added 
 #' to the new or old xts depending on which xts is missing the column name(s).
 #' @export
-xts_rbind <- function(old, new) {
-  nm_union <- unique(c(colnames(new), colnames(old)))
-  new_miss <- !nm_union %in% colnames(new)
-  old_miss <- !nm_union %in% colnames(old)
-  if (any(new_miss)) {
-    new_add <- matrix(nrow = nrow(new), ncol = sum(new_miss))
-    new_add <- xts(new_add, zoo::index(new))
-    colnames(new_add) <- nm_union[new_miss]
-    new <- xts_cbind(new, new_add)
-  }
-  if (any(old_miss)) {
-    old_add <- matrix(nrow = nrow(old), ncol = sum(old_miss))
-    old_add <- xts(old_add, zoo::index(old))
-    colnames(old_add) <- nm_union[old_miss]
-    old <- xts_cbind(old, old_add)
-  }
-  new <- new[, colnames(old)]
-  dt_inter <- intersect(as.Date(zoo::index(new)), as.Date(zoo::index(old)))
-  if (length(dt_inter) > 0) {
-    dt_inter <- as.Date(dt_inter)
-    kp_dt <- !as.Date(zoo::index(old)) %in% dt_inter
-    old <- old[kp_dt, ]
-  }
-  rbind(old, new)
+xts_rbind <- function(new, old) {
+  new_df <- xts_to_dataframe(new)
+  old_df <- xts_to_dataframe(old)
+  new_ldf <- pivot_longer(new_df, cols = -Date, names_to = "name", 
+                          values_to = "value")
+  old_ldf <- pivot_longer(old_df, cols = -Date, names_to = "name",
+                          values_to = "value")
+  new_id <- paste0(new_ldf$Date, new_ldf$name)
+  old_id <- paste0(old_ldf$Date, old_ldf$name)
+  # find new ids place in old ids, replace with new values
+  ix <- na.omit(match(new_id, old_id))
+  combo <- rbind(new_ldf, old_ldf[-ix, ])
+  combo_w <- pivot_wider(combo, id_cols = Date, names_from = name, 
+                         values_from = value)
+  return(df_to_xts(combo_w))
 }
 
 
